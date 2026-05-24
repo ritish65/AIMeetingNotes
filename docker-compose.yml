@@ -1,0 +1,47 @@
+version: "3.8"
+
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: pmia-qdrant
+    ports:
+      - "6335:6333"
+      - "6336:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pmia-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/pmia.db
+      - DATA_DIR=/app/data
+      - QDRANT_URL=http://qdrant:6333
+      - LLM_PROVIDER=openai
+      - STT_BACKEND=stub
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      - qdrant
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pmia-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: always
+
+volumes:
+  qdrant_data:
+  backend_data:
