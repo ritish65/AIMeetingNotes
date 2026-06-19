@@ -33,13 +33,23 @@ def parse_json_from_llm(content: str) -> Dict[str, Any]:
         cleaned = "\n".join(lines).strip()
     try:
         return json.loads(cleaned)
-    except Exception:
+    except Exception as first_err:
         m = re.search(r"\{.*\}", cleaned, re.DOTALL)
         if m:
             try:
                 return json.loads(m.group(0))
-            except Exception:
-                pass
+            except Exception as regex_err:
+                logger.warning(
+                    "Failed to parse JSON from LLM output (regex fallback): {}. Content preview: {}",
+                    regex_err,
+                    cleaned[:200],
+                )
+                return {}
+        logger.warning(
+            "Failed to parse JSON from LLM output: {}. Content preview: {}",
+            first_err,
+            cleaned[:200],
+        )
         return {}
 
 

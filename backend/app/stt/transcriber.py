@@ -41,7 +41,10 @@ class FasterWhisperTranscriber(BaseTranscriber):
             self.model = None
 
     def transcribe_chunk(self, pcm_bytes: bytes) -> str:
-        if not self.model or len(pcm_bytes) < 320:
+        if not self.model:
+            logger.warning("Whisper model not loaded; cannot transcribe audio chunk.")
+            return ""
+        if len(pcm_bytes) < 320:
             return ""
         # Convert 16-bit PCM bytes to float32 normalized array
         audio_np = np.frombuffer(pcm_bytes, dtype=np.int16).astype(np.float32) / 32768.0

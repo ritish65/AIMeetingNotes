@@ -69,6 +69,12 @@ async def get_meeting(meeting_id: str, db: AsyncSession = Depends(get_session)) 
 
 @router.delete("/meetings/{meeting_id}")
 async def delete_meeting(meeting_id: str, db: AsyncSession = Depends(get_session)) -> Dict[str, Any]:
+    # Verify the meeting exists before deleting
+    res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
+    meeting = res.scalar_one_or_none()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
     # Delete from Qdrant vector index
     idx = get_search_index()
     await idx.invalidate_meeting(meeting_id)
@@ -143,6 +149,14 @@ async def finalize_meeting(
             speaker_tag = f"{s.speaker or 'Speaker'}: "
             assembled.append(f"{speaker_tag}{s.text}")
         meeting.transcript = "\n".join(assembled)
+
+    if not meeting.transcript or not meeting.transcript.strip():
+        meeting.status = MeetingStatus.failed
+        await db.commit()
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot finalize meeting: transcript is empty. Record audio or provide a transcript.",
+        )
 
     await db.commit()
 

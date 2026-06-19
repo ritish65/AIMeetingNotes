@@ -63,6 +63,7 @@ async def process_meeting_pipeline(meeting_id: str, raw_transcript: str) -> None
     async with session_scope() as db:
         meeting = await fetch_meeting(db, meeting_id)
         if not meeting:
+            logger.error("Meeting {} not found after workflow completion; cannot persist results.", meeting_id)
             return
 
         meeting.transcript = final_state.get("formatted_transcript") or raw_transcript
@@ -94,8 +95,13 @@ async def process_meeting_pipeline(meeting_id: str, raw_transcript: str) -> None
             if item.get("due_date"):
                 try:
                     ai.due_date = datetime.fromisoformat(item["due_date"].replace("Z", "+00:00"))
-                except ValueError:
-                    pass
+                except (ValueError, TypeError) as e:
+                    logger.warning(
+                        "Could not parse due_date '{}' for action item '{}': {}",
+                        item["due_date"],
+                        item.get("description", "unknown"),
+                        e,
+                    )
 
             db.add(ai)
             action_item_objs.append(ai)
