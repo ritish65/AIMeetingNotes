@@ -5,16 +5,14 @@ Filesystem. Provides clean stubs when integrations are not configured.
 """
 from __future__ import annotations
 
-import json
-import os
 import inspect
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
 from ..config import settings
+from ..utils import build_google_service
 
 
 class ToolResponse:
@@ -92,17 +90,8 @@ def send_summary_email(recipients: List[str], subject: str, body: str) -> ToolRe
     try:
         import base64
         from email.mime.text import MIMEText
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
 
-        creds = Credentials(
-            token=None,
-            refresh_token=settings.gmail_refresh_token,
-            client_id=settings.gmail_client_id,
-            client_secret=settings.gmail_client_secret,
-            token_uri="https://oauth2.googleapis.com/token",
-        )
-        service = build("gmail", "v1", credentials=creds)
+        service = build_google_service("gmail")
 
         mime = MIMEText(body, "html" if "<html" in body.lower() else "plain")
         mime["to"] = ", ".join(recipients)
@@ -141,17 +130,8 @@ def schedule_followup(title: str, start_time: str, duration_minutes: int = 30) -
 
     try:
         from datetime import timedelta
-        from google.oauth2.credentials import Credentials
-        from googleapiclient.discovery import build
 
-        creds = Credentials(
-            token=None,
-            refresh_token=settings.gcal_refresh_token,
-            client_id=settings.gcal_client_id,
-            client_secret=settings.gcal_client_secret,
-            token_uri="https://oauth2.googleapis.com/token",
-        )
-        service = build("calendar", "v3", credentials=creds)
+        service = build_google_service("gcal")
 
         dt_start = datetime.fromisoformat(start_time)
         dt_end = dt_start + timedelta(minutes=duration_minutes)
