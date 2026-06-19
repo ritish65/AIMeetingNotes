@@ -32,6 +32,7 @@ from ..search.index import get_search_index
 from ..services.meeting_processor import process_meeting_pipeline
 from ..stt.transcriber import get_transcriber
 from ..tools.registry import execute_tool
+from ..utils import create_transcript_segment, fetch_meeting
 
 router = APIRouter()
 
@@ -60,8 +61,7 @@ async def list_meetings(db: AsyncSession = Depends(get_session)) -> List[Meeting
 
 @router.get("/meetings/{meeting_id}", response_model=MeetingOut)
 async def get_meeting(meeting_id: str, db: AsyncSession = Depends(get_session)) -> Meeting:
-    res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
-    meeting = res.scalar_one_or_none()
+    meeting = await fetch_meeting(db, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     return meeting
@@ -118,8 +118,7 @@ async def finalize_meeting(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_session),
 ) -> Dict[str, Any]:
-    res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
-    meeting = res.scalar_one_or_none()
+    meeting = await fetch_meeting(db, meeting_id)
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
 
@@ -262,24 +261,18 @@ async def ws_stt_endpoint(websocket: WebSocket) -> None:
                     transcription = transcriber.transcribe_chunk(bytes(audio_buffer))
 
                     if transcription.strip():
-                        # Save segment in DB
                         from ..db import session_scope
 
                         async with session_scope() as db:
-                            # Estimate start/end times
                             seg_dur_ms = int((len(audio_buffer) / 32000) * 1000)
-                            segment = TranscriptSegment(
+                            segment = await create_transcript_segment(
+                                db,
                                 meeting_id=meeting_id,
-                                speaker="Speaker 1",
+                                text=transcription,
                                 start_ms=max(0, int((acc_bytes / 32000) * 1000) - seg_dur_ms),
                                 end_ms=int((acc_bytes / 32000) * 1000),
-                                text=transcription,
-                                is_final=True,
                             )
-                            db.add(segment)
-                            await db.commit()
 
-                            # Send immediate update back to UI
                             await websocket.send_json(
                                 {
                                     "speaker": segment.speaker,
@@ -316,15 +309,12 @@ async def ws_stt_endpoint(websocket: WebSocket) -> None:
                     from ..db import session_scope
 
                     async with session_scope() as db:
-                        segment = TranscriptSegment(
+                        await create_transcript_segment(
+                            db,
                             meeting_id=meeting_id,
-                            speaker="Speaker 1",
+                            text=transcription,
                             start_ms=max(0, int((acc_bytes / 32000) * 1000) - int((len(audio_buffer) / 32000) * 1000)),
                             end_ms=int((acc_bytes / 32000) * 1000),
-                            text=transcription,
-                            is_final=True,
                         )
-                        db.add(segment)
-                        await db.commit()
                 except Exception as db_err:
                     logger.error("Failed to commit final chunk: {}", db_err)

@@ -9,15 +9,13 @@ Uses a 5-node agent topology:
 """
 from __future__ import annotations
 
-import json
 from typing import Any, Dict, List, TypedDict
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
 from langgraph.graph import StateGraph, END
 
-from ..config import settings
 from ..llm import get_llm
-from ..schemas import ActionItem, MeetingSummary
+from ..utils import invoke_llm_json, parse_json_from_llm
 
 
 class AgentState(TypedDict):
@@ -57,13 +55,13 @@ async def transcription_segmentation_agent(state: AgentState) -> Dict[str, Any]:
         return {"errors": [f"Transcription node error: {e}"], "formatted_transcript": raw}
 
 
+
 async def action_item_agent(state: AgentState) -> Dict[str, Any]:
     """Agent 2: Extract key action items matching type-safe Pydantic schema."""
     transcript = state.get("formatted_transcript", "")
     if not transcript:
         return {"action_items": []}
 
-    llm = get_llm()
     prompt = (
         "You are an expert Project Manager. Analyze the meeting transcript below and extract a list "
         "of all action items, deliverables, and tasks explicitly or implicitly assigned. "
@@ -78,8 +76,7 @@ async def action_item_agent(state: AgentState) -> Dict[str, Any]:
         f"Transcript:\n{transcript}"
     )
     try:
-        res = await llm.ainvoke([SystemMessage(content=prompt)])
-        data = _parse_json_from_llm(str(res.content))
+        data = await invoke_llm_json(prompt)
         items = data.get("action_items", [])
         return {"action_items": items}
     except Exception as e:
@@ -92,7 +89,6 @@ async def summarizer_agent(state: AgentState) -> Dict[str, Any]:
     if not transcript:
         return {"summary": "No summary available.", "key_decisions": [], "next_steps": []}
 
-    llm = get_llm()
     prompt = (
         "You are an executive assistant. Synthesize the meeting transcript below into a professional, "
         "concise, yet comprehensive meeting record.\n"
@@ -109,8 +105,7 @@ async def summarizer_agent(state: AgentState) -> Dict[str, Any]:
         f"Transcript:\n{transcript}"
     )
     try:
-        res = await llm.ainvoke([SystemMessage(content=prompt)])
-        data = _parse_json_from_llm(str(res.content))
+        data = await invoke_llm_json(prompt)
         return {
             "summary": data.get("summary", "Summary generation failed."),
             "key_decisions": data.get("key_decisions", []),
@@ -131,7 +126,6 @@ async def participant_agent(state: AgentState) -> Dict[str, Any]:
     if not transcript:
         return {"participants": []}
 
-    llm = get_llm()
     prompt = (
         "Identify all distinct participants and speakers active in the following meeting transcript.\n"
         "Return a JSON array of participant names.\n\n"
@@ -139,8 +133,7 @@ async def participant_agent(state: AgentState) -> Dict[str, Any]:
         f"Transcript:\n{transcript}"
     )
     try:
-        res = await llm.ainvoke([SystemMessage(content=prompt)])
-        data = _parse_json_from_llm(str(res.content))
+        data = await invoke_llm_json(prompt)
         return {"participants": data.get("participants", [])}
     except Exception as e:
         return {"errors": [f"Participant node error: {e}"], "participants": []}
@@ -156,30 +149,8 @@ async def context_retrieval_agent(state: AgentState) -> Dict[str, Any]:
 # ---------- Helper utilities ----------
 
 
-def _parse_json_from_llm(content: str) -> Dict[str, Any]:
-    """Safely extracts and parses JSON from standard markdown wrappers."""
-    cleaned = content.strip()
-    if cleaned.startswith("```"):
-        # strip markdown wrappers
-        lines = cleaned.splitlines()
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].strip() == "```":
-            lines = lines[:-1]
-        cleaned = "\n".join(lines).strip()
-    try:
-        return json.loads(cleaned)
-    except Exception:
-        # regex search for json block
-        import re
-
-        m = re.search(r"\{.*\}", cleaned, re.DOTALL)
-        if m:
-            try:
-                return json.loads(m.group(0))
-            except Exception:
-                pass
-        return {}
+# Kept as a thin re-export for backward compatibility
+_parse_json_from_llm = parse_json_from_llm
 
 
 # ---------- Graph Compilation ----------

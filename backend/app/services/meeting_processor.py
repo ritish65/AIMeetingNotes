@@ -17,6 +17,7 @@ from ..db import session_scope
 from ..models import ActionItem, ApprovalRequest, ApprovalStatus, Meeting, MeetingStatus, Priority
 from ..search.index import get_search_index
 from ..tools.registry import execute_tool
+from ..utils import fetch_meeting
 
 
 async def process_meeting_pipeline(meeting_id: str, raw_transcript: str) -> None:
@@ -24,8 +25,7 @@ async def process_meeting_pipeline(meeting_id: str, raw_transcript: str) -> None
     logger.info("Starting processing pipeline for meeting: {}", meeting_id)
 
     async with session_scope() as db:
-        res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
-        meeting = res.scalar_one_or_none()
+        meeting = await fetch_meeting(db, meeting_id)
         if not meeting:
             logger.error("Meeting {} not found in DB; abandoning pipeline.", meeting_id)
             return
@@ -53,8 +53,7 @@ async def process_meeting_pipeline(meeting_id: str, raw_transcript: str) -> None
     except Exception as e:
         logger.error("LangGraph DAG failed for meeting {}: {}", meeting_id, e)
         async with session_scope() as db:
-            res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
-            meeting = res.scalar_one_or_none()
+            meeting = await fetch_meeting(db, meeting_id)
             if meeting:
                 meeting.status = MeetingStatus.failed
             await db.commit()
@@ -62,8 +61,7 @@ async def process_meeting_pipeline(meeting_id: str, raw_transcript: str) -> None
 
     # Step 2: Write analysis back to Database
     async with session_scope() as db:
-        res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
-        meeting = res.scalar_one_or_none()
+        meeting = await fetch_meeting(db, meeting_id)
         if not meeting:
             return
 

@@ -5,15 +5,14 @@ and a memory-backed BM25 fallback for hybrid retrieval in standalone runs.
 """
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
 from ..config import settings
-from ..llm import get_llm
 from ..schemas import Intent, SearchHit, SearchRequest, SearchResponse
+from ..utils import invoke_llm_json
 
 
 class HybridSearchIndex:
@@ -183,7 +182,6 @@ class HybridSearchIndex:
 
     async def route_intent(self, query: str) -> Intent:
         """Determines routing logic via LLM semantic categorization."""
-        llm = get_llm()
         prompt = (
             "Analyze this user message to a personal meeting productivity assistant.\n"
             "Classify the user intent into exactly one of these labels:\n"
@@ -196,10 +194,7 @@ class HybridSearchIndex:
             f"Query: {query}"
         )
         try:
-            res = await llm.ainvoke([prompt])
-            from ..agents.workflow import _parse_json_from_llm
-
-            data = _parse_json_from_llm(str(res.content))
+            data = await invoke_llm_json(prompt)
             return Intent(
                 intent=data.get("intent", "search"),
                 confidence=float(data.get("confidence", 0.7)),
@@ -210,7 +205,6 @@ class HybridSearchIndex:
 
     async def amplify_query(self, query: str) -> List[str]:
         """Multi-query amplification: expands search query into diverse semantic variations."""
-        llm = get_llm()
         prompt = (
             "You are a search expansion engine. Take the search query below and expand it into "
             "exactly 3 highly relevant semantic variations/synonyms to improve vector-search coverage "
@@ -220,10 +214,7 @@ class HybridSearchIndex:
             f"Query: {query}"
         )
         try:
-            res = await llm.ainvoke([prompt])
-            from ..agents.workflow import _parse_json_from_llm
-
-            data = _parse_json_from_llm(str(res.content))
+            data = await invoke_llm_json(prompt)
             variations = data.get("queries", [])
             # Always ensure the original is first
             unique_queries = [query]
