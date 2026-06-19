@@ -178,7 +178,11 @@ class HybridSearchIndex:
                 )
                 logger.info("Invalidated meeting {} from Qdrant", meeting_id)
             except Exception as e:
-                logger.error("Qdrant delete failed: {}", e)
+                logger.error(
+                    "Qdrant delete failed for meeting {}: {}. Stale data may remain in the index.",
+                    meeting_id,
+                    e,
+                )
 
     async def route_intent(self, query: str) -> Intent:
         """Determines routing logic via LLM semantic categorization."""
@@ -200,7 +204,8 @@ class HybridSearchIndex:
                 confidence=float(data.get("confidence", 0.7)),
                 rationale=data.get("rationale", "default fallback"),
             )
-        except Exception:
+        except Exception as e:
+            logger.warning("Intent routing failed, falling back to 'search': {}", e)
             return Intent(intent="search", confidence=1.0, rationale="fallback default")
 
     async def amplify_query(self, query: str) -> List[str]:
@@ -222,7 +227,8 @@ class HybridSearchIndex:
                 if v.strip() and v not in unique_queries:
                     unique_queries.append(v)
             return unique_queries[:4]
-        except Exception:
+        except Exception as e:
+            logger.warning("Query amplification failed, using original query only: {}", e)
             return [query]
 
     async def search(self, req: SearchRequest) -> SearchResponse:
@@ -308,7 +314,7 @@ class HybridSearchIndex:
                         )
                     )
             except Exception as e:
-                logger.error("Qdrant search failed: {}", e)
+                logger.error("Qdrant search failed, returning empty results: {}", e)
 
         return SearchResponse(intent=intent, expanded_queries=queries, hits=hits)
 

@@ -68,6 +68,10 @@ export default function App() {
   const fetchMeetings = async () => {
     try {
       const res = await fetch(`${API_BASE}/meetings`);
+      if (!res.ok) {
+        console.error(`Failed to load meetings: ${res.status} ${res.statusText}`);
+        return;
+      }
       const data = await res.json();
       setMeetings(data);
     } catch (e) {
@@ -87,10 +91,19 @@ export default function App() {
         fetch(`${API_BASE}/meetings/${id}/approvals`)
       ]);
 
+      if (!mRes.ok) {
+        console.error(`Failed to load meeting ${id}: ${mRes.status} ${mRes.statusText}`);
+        return;
+      }
+
       const meeting = await mRes.json();
-      const segments = await segRes.json();
-      const actions = await actRes.json();
-      const apps = await appRes.json();
+      const segments = segRes.ok ? await segRes.json() : [];
+      const actions = actRes.ok ? await actRes.json() : [];
+      const apps = appRes.ok ? await appRes.json() : [];
+
+      if (!segRes.ok) console.error(`Failed to load segments: ${segRes.status}`);
+      if (!actRes.ok) console.error(`Failed to load action items: ${actRes.status}`);
+      if (!appRes.ok) console.error(`Failed to load approvals: ${appRes.status}`);
 
       setSelectedMeeting(meeting);
       setMeetingSegments(segments);
@@ -111,6 +124,12 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: `Meeting - ${new Date().toLocaleTimeString()}` })
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Failed to create meeting:', err.detail || res.statusText);
+        alert(`Failed to create meeting: ${err.detail || res.statusText}`);
+        return;
+      }
       const meeting = await res.json();
       
       setMeetings([meeting, ...meetings]);
@@ -253,11 +272,16 @@ export default function App() {
     if (currentMeetingId) {
       // Finalize transcription & run agents in backend
       try {
-        await fetch(`${API_BASE}/meetings/${currentMeetingId}/finalize`, {
+        const finRes = await fetch(`${API_BASE}/meetings/${currentMeetingId}/finalize`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({})
         });
+        if (!finRes.ok) {
+          const err = await finRes.json().catch(() => ({}));
+          console.error('Error finalizing meeting:', err.detail || finRes.statusText);
+          alert(`Error finalizing meeting: ${err.detail || finRes.statusText}`);
+        }
         fetchMeetingDetails(currentMeetingId);
       } catch (e) {
         console.error('Error finalising meeting', e);
@@ -268,7 +292,13 @@ export default function App() {
   const deleteMeeting = async (id) => {
     if (!confirm('Are you sure you want to delete this meeting?')) return;
     try {
-      await fetch(`${API_BASE}/meetings/${id}`, { method: 'DELETE' });
+      const delRes = await fetch(`${API_BASE}/meetings/${id}`, { method: 'DELETE' });
+      if (!delRes.ok) {
+        const err = await delRes.json().catch(() => ({}));
+        console.error('Failed to delete meeting:', err.detail || delRes.statusText);
+        alert(`Failed to delete meeting: ${err.detail || delRes.statusText}`);
+        return;
+      }
       setMeetings(meetings.filter(m => m.id !== id));
       if (selectedMeeting?.id === id) {
         setSelectedMeeting(null);
@@ -283,6 +313,11 @@ export default function App() {
       const res = await fetch(`${API_BASE}/approvals/${approvalId}/action?action=${action}`, {
         method: 'POST'
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Approval action failed: ${err.detail || res.statusText}`);
+        return;
+      }
       const data = await res.json();
       if (data.success) {
         // reload approvals
@@ -307,6 +342,12 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery, top_k: 6 })
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.error('Search failed:', err.detail || res.statusText);
+        alert(`Search failed: ${err.detail || res.statusText}`);
+        return;
+      }
       const data = await res.json();
       setSearchResponse(data);
     } catch (e) {
