@@ -1,7 +1,6 @@
 """FastAPI Core Entry Point."""
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -17,7 +16,7 @@ from .db import init_db
 async def lifespan(app: FastAPI):
     # Startup actions
     logger.info("Starting Personal Meeting Intelligence Agent API")
-    logger.info("Initializing database: {}", settings.database_url)
+    logger.info("Initializing database")
     await init_db()
 
     # Pre-warm search index
@@ -31,20 +30,29 @@ async def lifespan(app: FastAPI):
     logger.info("Stopping Personal Meeting Intelligence Agent API")
 
 
+_is_production = settings.app_env.lower() == "production"
+
 app = FastAPI(
     title="Personal Meeting Intelligence Agent API",
     description="Speech-to-text, LangGraph agents, Qdrant hybrid search, and MCP action tools.",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # CORS configurations
+_cors_origins = settings.cors_origins
+if settings.app_env.lower() != "production" and not _cors_origins:
+    _cors_origins = ["http://localhost:5173", "http://localhost:8000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=(settings.cors_origins if settings.app_env.lower() == "production" else ["*"]),
+    allow_origins=_cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Route registration

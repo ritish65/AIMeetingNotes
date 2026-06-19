@@ -304,7 +304,7 @@ async def ws_stt_endpoint(websocket: WebSocket) -> None:
     except Exception as e:
         logger.error("Error in real-time STT WebSocket connection: {}", e)
         try:
-            await websocket.send_json({"error": f"Internal server error: {e}"})
+            await websocket.send_json({"error": "Internal server error"})
         except Exception:
             pass
     finally:

@@ -5,9 +5,8 @@ Filesystem. Provides clean stubs when integrations are not configured.
 """
 from __future__ import annotations
 
-import json
-import os
 import inspect
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -66,7 +65,7 @@ def add_to_todoist(task: str, due_date: Optional[str] = None, priority: str = "m
         )
     except Exception as e:
         logger.error("Todoist api error: {}", e)
-        return ToolResponse(success=False, message=f"Todoist tool failed: {e}")
+        return ToolResponse(success=False, message="Todoist tool failed.")
 
 
 def send_summary_email(recipients: List[str], subject: str, body: str) -> ToolResponse:
@@ -120,7 +119,7 @@ def send_summary_email(recipients: List[str], subject: str, body: str) -> ToolRe
         )
     except Exception as e:
         logger.error("Gmail tool error: {}", e)
-        return ToolResponse(success=False, message=f"Gmail tool failed: {e}")
+        return ToolResponse(success=False, message="Gmail tool failed.")
 
 
 def schedule_followup(title: str, start_time: str, duration_minutes: int = 30) -> ToolResponse:
@@ -175,23 +174,30 @@ def schedule_followup(title: str, start_time: str, duration_minutes: int = 30) -
         )
     except Exception as e:
         logger.error("GCal tool error: {}", e)
-        return ToolResponse(success=False, message=f"Google Calendar tool failed: {e}")
+        return ToolResponse(success=False, message="Google Calendar tool failed.")
 
 
 def store_recording_filesystem(meeting_id: str, file_name: str, file_bytes: bytes) -> ToolResponse:
     """Store raw meeting recording in the system workspace folder."""
     try:
         audio_dir = settings.data_path / "audio"
-        p = audio_dir / f"{meeting_id}_{file_name}"
+        # Sanitize file_name to prevent path traversal
+        safe_name = Path(file_name).name
+        if not safe_name or safe_name in (".", ".."):
+            return ToolResponse(success=False, message="Invalid file name.")
+        p = audio_dir / f"{meeting_id}_{safe_name}"
+        # Verify resolved path stays within audio_dir
+        if not p.resolve().is_relative_to(audio_dir.resolve()):
+            return ToolResponse(success=False, message="Invalid file path.")
         p.write_bytes(file_bytes)
         return ToolResponse(
             success=True,
             message=f"Meeting recording stored locally at {p.name}.",
-            data={"file_path": str(p), "file_size": len(file_bytes)},
+            data={"file_name": p.name, "file_size": len(file_bytes)},
         )
     except Exception as e:
         logger.error("Filesystem write error: {}", e)
-        return ToolResponse(success=False, message=f"Filesystem storage tool failed: {e}")
+        return ToolResponse(success=False, message="Filesystem storage tool failed.")
 
 
 # ---------- Unified Tool Executor ----------
@@ -218,4 +224,4 @@ async def execute_tool(tool_name: str, payload: Dict[str, Any]) -> ToolResponse:
         return fn(**payload)
     except Exception as e:
         logger.error("Execution error on tool {}: {}", tool_name, e)
-        return ToolResponse(success=False, message=f"Tool execution failed with exception: {e}")
+        return ToolResponse(success=False, message="Tool execution failed.")
