@@ -52,10 +52,10 @@ class SearchHit(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
-    top_k: int = 8
+    query: str = Field(..., min_length=1, max_length=2000)
+    top_k: int = Field(default=8, ge=1, le=100)
     multi_query: bool = True
-    alpha: float = 0.5  # dense vs sparse fusion weight
+    alpha: float = Field(default=0.5, ge=0.0, le=1.0)
 
 
 class SearchResponse(BaseModel):
@@ -68,7 +68,7 @@ class SearchResponse(BaseModel):
 
 
 class MeetingCreate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=512)
 
 
 class MeetingOut(BaseModel):
@@ -126,5 +126,5 @@ class ApprovalOut(BaseModel):
 class TranscribeFinalize(BaseModel):
     """Body for /meetings/{id}/finalize."""
 
-    transcript: Optional[str] = None
+    transcript: Optional[str] = Field(default=None, max_length=500_000)
     autopilot: Optional[bool] = None

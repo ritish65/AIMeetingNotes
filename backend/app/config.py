@@ -1,6 +1,7 @@
 """Application configuration loaded from environment variables."""
 from __future__ import annotations
 
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import List
@@ -21,7 +22,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_host: str = "0.0.0.0"
     app_port: int = 8000
-    app_secret: str = "change-me"
+    app_secret: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     database_url: str = "sqlite+aiosqlite:///./pmia.db"
     data_dir: str = "./data"
     log_level: str = "INFO"
